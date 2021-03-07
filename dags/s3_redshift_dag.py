@@ -2,10 +2,7 @@ from airflow import DAG
 from datetime import datetime, timedelta
 import os
 from airflow.operators.dummy_operator import DummyOperator
-from airflow.operators import (StageToRedshiftOperator, 
-                            LoadOperator, 
-                            DataQualityOperator, 
-                            CreateRedshiftTablesOperator)
+from airflow.operators import (StageToRedshiftOperator, LoadOperator, DataQualityOperator, CreateRedshiftTablesOperator)
 from helpers import SqlInsertQueries, SqlCreateQueries
 
 # AWS_KEY = os.environ.get('AWS_KEY')
@@ -20,7 +17,7 @@ default_args = {
     'email_on_retry': False,
     'retries': 3,
     'retry_delay': timedelta(minutes=5),
-    'start_date': datetime(2021, 3, 5),
+    'start_date': datetime(2021, 3, 6),
     'catchup': False
 }
 
@@ -37,7 +34,7 @@ create_redshift_tables = CreateRedshiftTablesOperator(
     task_id='Create_redshift_tables',
     dag=dag,
     redshift_conn_id="redshift_connection",
-    query_list=[v.strip() for k, v in SqlCreateQueries.__dict__.items() if k[:1] != '_']
+    query_create_list=[v.strip() for k, v in SqlCreateQueries.__dict__.items() if k[:1] != '_']
 )
 
 stage_events_to_redshift = StageToRedshiftOperator(
@@ -109,27 +106,23 @@ load_time_dimension_table = LoadOperator(
 
 run_quality_checks = DataQualityOperator(
     task_id='Run_data_quality_checks',
-    dag=dag
+    dag=dag,
+    redshift_conn_id="redshift_connection",
+    tables_list=["songplays", "songs", "artists", "users", "time"],
+    sql_query_test = "SELECT COUNT(*) FROM {}"
 )
 
 end_operator = DummyOperator(task_id='Stop_execution',  dag=dag)
 
 start_operator >> create_redshift_tables
 
-create_redshift_tables >> stage_events_to_redshift
-create_redshift_tables >> stage_songs_to_redshift
 
-stage_events_to_redshift >> load_songplays_table
-stage_songs_to_redshift >> load_songplays_table
+create_redshift_tables >> [stage_events_to_redshift, stage_songs_to_redshift]
 
-load_songplays_table >> load_song_dimension_table
-load_songplays_table >> load_artist_dimension_table
-load_songplays_table >> load_user_dimension_table
-load_songplays_table >> load_time_dimension_table
+[stage_events_to_redshift, stage_songs_to_redshift] >> load_songplays_table
 
-load_song_dimension_table >> run_quality_checks
-load_artist_dimension_table >> run_quality_checks
-load_user_dimension_table >> run_quality_checks
-load_time_dimension_table >> run_quality_checks
+load_songplays_table >> [load_song_dimension_table, load_artist_dimension_table, load_user_dimension_table, load_time_dimension_table]
+
+[load_song_dimension_table, load_artist_dimension_table, load_user_dimension_table, load_time_dimension_table] >> run_quality_checks
 
 run_quality_checks >> end_operator

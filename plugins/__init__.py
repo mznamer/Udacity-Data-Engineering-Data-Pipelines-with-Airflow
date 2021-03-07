@@ -10,10 +10,11 @@ class UdacityPlugin(AirflowPlugin):
     name = "udacity_plugin"
     operators = [
         operators.StageToRedshiftOperator,
-        operators.LoadFactOperator,
-        operators.LoadDimensionOperator,
-        operators.DataQualityOperator
+        operators.LoadOperator,
+        operators.DataQualityOperator,
+        operators.CreateRedshiftTablesOperator
     ]
     helpers = [
-        helpers.SqlQueries
+        helpers.SqlCreateQueries,
+        helpers.SqlInsertQueries
     ]
